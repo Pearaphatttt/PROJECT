@@ -49,17 +49,25 @@ const StudentEditProfile = () => {
       if (isTestAccount) {
         // For test accounts, use mock data directly
         const meData = await studentService.getMe();
+        // Load profile picture from localStorage
+        const profileKey = `studentProfile_${email}`;
+        const storedProfile = localStorage.getItem(profileKey);
+        const stored = storedProfile ? JSON.parse(storedProfile) : {};
         const merged = {
           fullName: meData?.fullName || '',
           email: email || meData?.email || '',
           phone: meData?.phone || '',
-          skills: meData?.skills || [],
-          educationLevel: meData?.educationLevel || '',
-          fieldOfStudy: meData?.fieldOfStudy || '',
-          institution: meData?.institution || '',
-          province: meData?.province || '',
+          skills: meData?.skills || stored.skills || [],
+          educationLevel: meData?.educationLevel || stored.educationLevel || '',
+          fieldOfStudy: meData?.fieldOfStudy || stored.fieldOfStudy || '',
+          institution: meData?.institution || stored.institution || '',
+          province: meData?.province || stored.province || '',
+          profilePicture: stored.profilePicture || null,
         };
         setProfileData(merged);
+        if (merged.profilePicture) {
+          setProfilePicturePreview(merged.profilePicture);
+        }
         return;
       }
       
