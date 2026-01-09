@@ -15,6 +15,8 @@ import StudentProfile from './pages/StudentProfile';
 import StudentProfileDocuments from './pages/StudentProfileDocuments';
 import StudentProfileSettings from './pages/StudentProfileSettings';
 import CompanyDashboard from './pages/CompanyDashboard';
+import CompanyProfile from './pages/CompanyProfile';
+import CompanyEditProfile from './pages/CompanyEditProfile';
 import Placeholder from './pages/Placeholder';
 import ForgotPassword from './pages/ForgotPassword';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -127,6 +129,22 @@ function App() {
           element={
             <ProtectedRoute requiredRole="company">
               <CompanyDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/profile"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/profile/edit"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyEditProfile />
             </ProtectedRoute>
           }
         />

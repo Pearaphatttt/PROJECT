@@ -97,7 +97,7 @@ const StudentRegister = () => {
       return;
     }
 
-    // Save profile data
+    // Save profile data - store per email to avoid conflicts
     const profileData = {
       fullName,
       email,
@@ -108,6 +108,9 @@ const StudentRegister = () => {
       institution,
       province,
     };
+    const profileKey = `studentProfile_${email}`;
+    localStorage.setItem(profileKey, JSON.stringify(profileData));
+    // Also save to old format for backward compatibility
     localStorage.setItem('studentProfile', JSON.stringify(profileData));
 
     // Save resume
@@ -141,7 +144,7 @@ const StudentRegister = () => {
       return;
     }
 
-    // Save profile data
+    // Save profile data - store per email to avoid conflicts
     const profileData = {
       fullName,
       email,
@@ -152,6 +155,9 @@ const StudentRegister = () => {
       institution,
       province,
     };
+    const profileKey = `studentProfile_${email}`;
+    localStorage.setItem(profileKey, JSON.stringify(profileData));
+    // Also save to old format for backward compatibility
     localStorage.setItem('studentProfile', JSON.stringify(profileData));
     
     // Mark that resume is NOT uploaded

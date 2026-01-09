@@ -16,26 +16,55 @@ export const studentService = {
       }
       
       // For registered users, try to get profile data from localStorage
-      const storedProfile = localStorage.getItem('studentProfile');
-      if (storedProfile) {
+      // First try per-email storage
+      if (email) {
+        const profileKey = `studentProfile_${email}`;
+        const storedProfile = localStorage.getItem(profileKey);
+        if (storedProfile) {
+          try {
+            const profile = JSON.parse(storedProfile);
+            
+            // Merge profile data with email
+            return {
+              fullName: profile.fullName || 'Student',
+              email: email || profile.email || 'student@demo.com',
+              phone: profile.phone || '',
+              skills: profile.skills || [],
+              educationLevel: profile.educationLevel || '',
+              fieldOfStudy: profile.fieldOfStudy || '',
+              institution: profile.institution || '',
+              province: profile.province || '',
+            };
+          } catch (e) {
+            console.error('Failed to parse student profile:', e);
+          }
+        }
+      }
+      
+      // Fallback to old format for backward compatibility
+      const oldStoredProfile = localStorage.getItem('studentProfile');
+      if (oldStoredProfile) {
         try {
-          const profile = JSON.parse(storedProfile);
+          const profile = JSON.parse(oldStoredProfile);
           
-          // Merge profile data with email
-          return {
-            fullName: profile.fullName || 'Student',
-            email: email || profile.email || 'student@demo.com',
-            phone: profile.phone || '',
-            skills: profile.skills || [],
-            educationLevel: profile.educationLevel || '',
-            fieldOfStudy: profile.fieldOfStudy || '',
-            institution: profile.institution || '',
-            province: profile.province || '',
-          };
+          // Only use if email matches
+          if (email && profile.email === email) {
+            return {
+              fullName: profile.fullName || 'Student',
+              email: email || profile.email || 'student@demo.com',
+              phone: profile.phone || '',
+              skills: profile.skills || [],
+              educationLevel: profile.educationLevel || '',
+              fieldOfStudy: profile.fieldOfStudy || '',
+              institution: profile.institution || '',
+              province: profile.province || '',
+            };
+          }
         } catch (e) {
           console.error('Failed to parse student profile:', e);
         }
       }
+      
       // Fallback to mock data if no profile found
       return studentMock;
     }

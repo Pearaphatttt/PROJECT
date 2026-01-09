@@ -52,6 +52,16 @@ const StudentDashboard = () => {
       }
     };
     loadData();
+    
+    // Listen for profile updates
+    const handleProfileUpdate = () => {
+      loadData();
+    };
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
   }, [email]);
 
   const handleApply = async (internshipId) => {

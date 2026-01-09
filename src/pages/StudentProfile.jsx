@@ -18,6 +18,16 @@ const StudentProfile = () => {
   useEffect(() => {
     loadData();
     loadResume();
+    
+    // Listen for profile updates
+    const handleProfileUpdate = () => {
+      loadData();
+    };
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
   }, []);
 
   const loadData = async () => {
@@ -26,6 +36,21 @@ const StudentProfile = () => {
         studentService.getMe(),
         studentService.getSummary(),
       ]);
+      
+      // Load profile picture from localStorage
+      const profileKey = `studentProfile_${email}`;
+      const storedProfile = localStorage.getItem(profileKey);
+      if (storedProfile) {
+        try {
+          const stored = JSON.parse(storedProfile);
+          if (stored.profilePicture) {
+            meData.profilePicture = stored.profilePicture;
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+      
       setMe(meData);
       setSummary(summaryData);
     } catch (error) {
@@ -76,12 +101,20 @@ const StudentProfile = () => {
         }}
       >
         <div className="flex items-start gap-4">
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-semibold"
-            style={{ background: '#3F6FA6' }}
-          >
-            {me?.fullName?.[0] || email?.[0]?.toUpperCase() || 'U'}
-          </div>
+          {me?.profilePicture ? (
+            <img
+              src={me.profilePicture}
+              alt="Profile"
+              className="w-16 h-16 rounded-full object-cover"
+            />
+          ) : (
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-semibold"
+              style={{ background: '#3F6FA6' }}
+            >
+              {me?.fullName?.[0] || email?.[0]?.toUpperCase() || 'U'}
+            </div>
+          )}
           <div className="flex-1">
             <h3 className="text-xl font-bold mb-2" style={{ color: '#2C3E5B' }}>
               {me?.fullName || 'Student'}

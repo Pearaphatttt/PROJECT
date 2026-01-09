@@ -19,6 +19,21 @@ const CompanyDashboard = () => {
           companyService.getMe(),
           companyService.getCandidateMatches(),
         ]);
+        
+        // Load profile picture from localStorage
+        const profileKey = `companyProfile_${email}`;
+        const storedProfile = localStorage.getItem(profileKey);
+        if (storedProfile) {
+          try {
+            const stored = JSON.parse(storedProfile);
+            if (stored.profilePicture) {
+              meData.profilePicture = stored.profilePicture;
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
         setMe(meData);
         setCandidateMatches(matchesData);
       } catch (error) {
@@ -28,7 +43,17 @@ const CompanyDashboard = () => {
       }
     };
     loadData();
-  }, []);
+    
+    // Listen for profile updates
+    const handleProfileUpdate = () => {
+      loadData();
+    };
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
+  }, [email]);
 
   const handleLogout = () => {
     logout();
@@ -58,12 +83,20 @@ const CompanyDashboard = () => {
           </h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-                style={{ background: '#3F6FA6' }}
-              >
-                {me?.hrName?.[0] || email?.[0]?.toUpperCase() || 'H'}
-              </div>
+              {me?.profilePicture ? (
+                <img
+                  src={me.profilePicture}
+                  alt="Profile"
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold"
+                  style={{ background: '#3F6FA6' }}
+                >
+                  {me?.hrName?.[0] || email?.[0]?.toUpperCase() || 'H'}
+                </div>
+              )}
               <span className="text-sm hidden sm:inline" style={{ color: '#6B7C93' }}>
                 {me?.hrName || email}
               </span>

@@ -27,13 +27,38 @@ const StudentLayout = ({ children }) => {
     const loadMe = async () => {
       try {
         const meData = await studentService.getMe();
+        
+        // Load profile picture from localStorage
+        const profileKey = `studentProfile_${email}`;
+        const storedProfile = localStorage.getItem(profileKey);
+        if (storedProfile) {
+          try {
+            const stored = JSON.parse(storedProfile);
+            if (stored.profilePicture) {
+              meData.profilePicture = stored.profilePicture;
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
         setMe(meData);
       } catch (error) {
         console.error('Failed to load user data:', error);
       }
     };
     loadMe();
-  }, []);
+    
+    // Listen for profile updates
+    const handleProfileUpdate = () => {
+      loadMe();
+    };
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
+  }, [email]);
 
   const handleLogout = () => {
     logout();
@@ -210,12 +235,20 @@ const StudentLayout = ({ children }) => {
             </h1>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-                  style={{ background: '#3F6FA6' }}
-                >
-                  {me?.fullName?.[0] || email?.[0]?.toUpperCase() || 'U'}
-                </div>
+                {me?.profilePicture ? (
+                  <img
+                    src={me.profilePicture}
+                    alt="Profile"
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold"
+                    style={{ background: '#3F6FA6' }}
+                  >
+                    {me?.fullName?.[0] || email?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                )}
                 <span className="text-sm" style={{ color: '#6B7C93' }}>
                   {me?.fullName || email}
                 </span>

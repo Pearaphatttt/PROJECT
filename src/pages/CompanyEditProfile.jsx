@@ -1,39 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/authStore';
-import { studentService } from '../services/studentService';
+import { companyService } from '../services/companyService';
 import CardShell from '../components/CardShell';
 import LabeledInput from '../components/LabeledInput';
-import TagInput from '../components/TagInput';
 import ActionButton from '../components/ActionButton';
 import { Edit, Check, X, Camera, Upload } from 'lucide-react';
 
-const StudentEditProfile = () => {
+const CompanyEditProfile = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { email } = useAuth();
-  const extracted = location.state?.extracted || {};
 
-  // Load existing data from localStorage or service
   const [profileData, setProfileData] = useState({
-    fullName: '',
+    companyName: '',
+    hrName: '',
     email: '',
-    phone: '',
-    skills: [],
-    educationLevel: '',
-    fieldOfStudy: '',
-    institution: '',
+    industry: '',
     province: '',
     profilePicture: null,
   });
 
-  // Track which field is being edited
   const [editingField, setEditingField] = useState(null);
-  
-  // Temporary values while editing
   const [editValues, setEditValues] = useState({});
-  
-  // Profile picture preview
   const [profilePicturePreview, setProfilePicturePreview] = useState(null);
 
   useEffect(() => {
@@ -47,56 +35,42 @@ const StudentEditProfile = () => {
       const isTestAccount = testAccounts.includes(email);
       
       if (isTestAccount) {
-        // For test accounts, use mock data directly
-        const meData = await studentService.getMe();
+        // For test accounts, use mock data directly from service
+        const meData = await companyService.getMe();
+        // Load profile picture from localStorage
+        const profileKey = `companyProfile_${email}`;
+        const storedProfile = localStorage.getItem(profileKey);
+        const stored = storedProfile ? JSON.parse(storedProfile) : {};
         const merged = {
-          fullName: meData?.fullName || '',
+          companyName: meData?.companyName || '',
+          hrName: meData?.hrName || '',
           email: email || meData?.email || '',
-          phone: meData?.phone || '',
-          skills: meData?.skills || [],
-          educationLevel: meData?.educationLevel || '',
-          fieldOfStudy: meData?.fieldOfStudy || '',
-          institution: meData?.institution || '',
+          industry: meData?.industry || '',
           province: meData?.province || '',
+          profilePicture: stored.profilePicture || null,
         };
         setProfileData(merged);
+        if (merged.profilePicture) {
+          setProfilePicturePreview(merged.profilePicture);
+        }
         return;
       }
       
-      // For registered users, try to get from service first (which loads from localStorage)
-      const meData = await studentService.getMe();
+      // For registered users
+      const meData = await companyService.getMe();
       
       // Get from localStorage - store per email to avoid conflicts
-      const profileKey = `studentProfile_${email}`;
+      const profileKey = `companyProfile_${email}`;
       const storedProfile = localStorage.getItem(profileKey);
       const stored = storedProfile ? JSON.parse(storedProfile) : {};
       
-      // Also check old format for backward compatibility (only if email matches)
-      const oldStoredProfile = localStorage.getItem('studentProfile');
-      let oldStored = {};
-      if (oldStoredProfile) {
-        try {
-          const parsed = JSON.parse(oldStoredProfile);
-          // Only use old format if email matches
-          if (parsed.email === email) {
-            oldStored = parsed;
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-      }
-      
-      // Merge extracted data (from register), stored data, and service data
       const merged = {
-        fullName: extracted.fullName || stored.fullName || oldStored.fullName || meData?.fullName || '',
-        email: email || extracted.email || stored.email || oldStored.email || meData?.email || '',
-        phone: extracted.phone || stored.phone || oldStored.phone || meData?.phone || '',
-        skills: extracted.skills || stored.skills || oldStored.skills || meData?.skills || [],
-        educationLevel: extracted.educationLevel || stored.educationLevel || oldStored.educationLevel || meData?.educationLevel || '',
-        fieldOfStudy: extracted.fieldOfStudy || stored.fieldOfStudy || oldStored.fieldOfStudy || meData?.fieldOfStudy || '',
-        institution: extracted.institution || stored.institution || oldStored.institution || meData?.institution || '',
-        province: extracted.province || stored.province || oldStored.province || meData?.province || '',
-        profilePicture: stored.profilePicture || oldStored.profilePicture || null,
+        companyName: stored.companyName || meData?.companyName || '',
+        hrName: stored.hrName || meData?.hrName || '',
+        email: email || stored.email || meData?.email || '',
+        industry: stored.industry || meData?.industry || '',
+        province: stored.province || meData?.province || '',
+        profilePicture: stored.profilePicture || null,
       };
       
       setProfileData(merged);
@@ -108,7 +82,6 @@ const StudentEditProfile = () => {
     }
   };
 
-  const educationLevels = ['Diploma', 'Bachelor', 'Master', 'PhD', 'Other'];
   const provinces = [
     'Bangkok',
     'Nonthaburi',
@@ -118,6 +91,17 @@ const StudentEditProfile = () => {
     'Khon Kaen',
     'Phuket',
     'Songkhla',
+  ];
+
+  const industries = [
+    'IT/Software',
+    'Telecom',
+    'Finance',
+    'Manufacturing',
+    'Retail',
+    'Healthcare',
+    'Education',
+    'Other',
   ];
 
   const handleEdit = (field) => {
@@ -136,20 +120,11 @@ const StudentEditProfile = () => {
     setProfileData(updatedData);
     
     // Save to localStorage - store per email to avoid conflicts
-    const profileKey = `studentProfile_${email}`;
+    const profileKey = `companyProfile_${email}`;
     const storedProfile = localStorage.getItem(profileKey);
     const stored = storedProfile ? JSON.parse(storedProfile) : {};
     const updated = { ...stored, ...updatedData };
     localStorage.setItem(profileKey, JSON.stringify(updated));
-    
-    // Also update old format for backward compatibility (but only if email matches)
-    const oldStoredProfile = localStorage.getItem('studentProfile');
-    if (oldStoredProfile) {
-      const oldStored = JSON.parse(oldStoredProfile);
-      if (oldStored.email === email) {
-        localStorage.setItem('studentProfile', JSON.stringify(updated));
-      }
-    }
     
     // Trigger custom event to notify other components
     window.dispatchEvent(new CustomEvent('profileUpdated', { 
@@ -175,19 +150,16 @@ const StudentEditProfile = () => {
   const handleProfilePictureChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('image/')) {
         alert('Please select an image file');
         return;
       }
       
-      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         alert('Image size should be less than 5MB');
         return;
       }
       
-      // Convert to base64 for storage
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result;
@@ -199,7 +171,7 @@ const StudentEditProfile = () => {
         setProfilePicturePreview(base64String);
         
         // Save to localStorage immediately
-        const profileKey = `studentProfile_${email}`;
+        const profileKey = `companyProfile_${email}`;
         const storedProfile = localStorage.getItem(profileKey);
         const stored = storedProfile ? JSON.parse(storedProfile) : {};
         const updated = { ...stored, ...updatedData };
@@ -223,7 +195,7 @@ const StudentEditProfile = () => {
     setProfilePicturePreview(null);
     
     // Save to localStorage
-    const profileKey = `studentProfile_${email}`;
+    const profileKey = `companyProfile_${email}`;
     const storedProfile = localStorage.getItem(profileKey);
     const stored = storedProfile ? JSON.parse(storedProfile) : {};
     const updated = { ...stored, ...updatedData };
@@ -336,91 +308,6 @@ const StudentEditProfile = () => {
     );
   };
 
-  const renderSkillsField = () => {
-    const isEditing = editingField === 'skills';
-    const skills = isEditing ? (editValues.skills ?? profileData.skills) : profileData.skills;
-
-    return (
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-2">
-          <label
-            className="block text-sm font-normal"
-            style={{ color: '#6B7C93', fontSize: '14px' }}
-          >
-            Skills
-          </label>
-          {!isEditing ? (
-            <button
-              onClick={() => handleEdit('skills')}
-              className="p-1 hover:bg-gray-100 rounded"
-              style={{ color: '#3F6FA6' }}
-            >
-              <Edit size={16} />
-            </button>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleSaveField('skills')}
-                className="p-1 hover:bg-gray-100 rounded"
-                style={{ color: '#10B981' }}
-              >
-                <Check size={16} />
-              </button>
-              <button
-                onClick={handleCancel}
-                className="p-1 hover:bg-gray-100 rounded"
-                style={{ color: '#EF4444' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
-        </div>
-        {isEditing ? (
-          <TagInput
-            tags={skills}
-            onChange={(newSkills) => handleChange('skills', newSkills)}
-            placeholder="Add a skill"
-          />
-        ) : (
-          <div
-            className="w-full min-h-[44px]"
-            style={{
-              background: '#F5F7FB',
-              border: '1px solid #D6DEE9',
-              borderRadius: '8px',
-              padding: '12px 14px',
-              fontSize: '14px',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px',
-              alignItems: 'center',
-              color: skills.length > 0 ? '#2C3E5B' : '#6B7C93',
-            }}
-          >
-            {skills.length > 0 ? (
-              skills.map((skill, index) => (
-                <span
-                  key={index}
-                  className="px-3 py-1 rounded-full"
-                  style={{
-                    background: '#E0F2FE',
-                    color: '#3F6FA6',
-                    fontSize: '12px',
-                  }}
-                >
-                  {skill}
-                </span>
-              ))
-            ) : (
-              'No skills set'
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div
       className="min-h-screen flex items-center justify-center py-6 sm:py-12 px-4"
@@ -431,7 +318,7 @@ const StudentEditProfile = () => {
           className="text-center mb-6 sm:mb-8 font-bold text-2xl sm:text-3xl md:text-[34px]"
           style={{ color: '#2C3E5B' }}
         >
-          Edit Profile
+          Edit Company Profile
         </h1>
 
         <div className="max-w-md mx-auto">
@@ -454,7 +341,7 @@ const StudentEditProfile = () => {
                     className="w-32 h-32 rounded-full flex items-center justify-center text-white text-4xl font-semibold"
                     style={{ background: '#3F6FA6' }}
                   >
-                    {profileData.fullName?.[0] || email?.[0]?.toUpperCase() || 'U'}
+                    {profileData.companyName?.[0] || email?.[0]?.toUpperCase() || 'C'}
                   </div>
                 )}
                 <label
@@ -494,17 +381,14 @@ const StudentEditProfile = () => {
             </div>
           </div>
 
-          {renderEditableField('fullName', 'Full Name', 'text')}
+          {renderEditableField('companyName', 'Company Name', 'text')}
+          {renderEditableField('hrName', 'HR Name', 'text')}
           {renderEditableField('email', 'Email', 'email')}
-          {renderEditableField('phone', 'Phone', 'tel')}
-          {renderSkillsField()}
-          {renderEditableField('educationLevel', 'Education Level', 'select', educationLevels)}
-          {renderEditableField('fieldOfStudy', 'Field of Study', 'text')}
-          {renderEditableField('institution', 'Institution', 'text')}
+          {renderEditableField('industry', 'Industry', 'select', industries)}
           {renderEditableField('province', 'Province/Area', 'select', provinces)}
 
           <div className="flex flex-col gap-3 mt-8">
-            <ActionButton onClick={() => navigate('/student/profile')} className="w-full">
+            <ActionButton onClick={() => navigate('/company/profile')} className="w-full">
               Back to Profile
             </ActionButton>
           </div>
@@ -514,4 +398,5 @@ const StudentEditProfile = () => {
   );
 };
 
-export default StudentEditProfile;
+export default CompanyEditProfile;
+
