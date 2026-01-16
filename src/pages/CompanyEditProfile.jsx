@@ -1,86 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/authStore';
-import { companyService } from '../services/companyService';
-import CardShell from '../components/CardShell';
+import { companyProfileService } from '../services/companyProfileService';
 import LabeledInput from '../components/LabeledInput';
 import ActionButton from '../components/ActionButton';
-import { Edit, Check, X, Camera, Upload } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 
 const CompanyEditProfile = () => {
   const navigate = useNavigate();
   const { email } = useAuth();
-
-  const [profileData, setProfileData] = useState({
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
     companyName: '',
-    hrName: '',
-    email: '',
     industry: '',
     province: '',
-    profilePicture: null,
+    website: '',
+    contactEmail: '',
+    phone: '',
+    about: '',
+    workModes: [],
   });
-
-  const [editingField, setEditingField] = useState(null);
-  const [editValues, setEditValues] = useState({});
-  const [profilePicturePreview, setProfilePicturePreview] = useState(null);
-
-  useEffect(() => {
-    loadProfileData();
-  }, []);
-
-  const loadProfileData = async () => {
-    try {
-      // Check if it's a test account first
-      const testAccounts = ['test@stu.com', 'test@hr.com'];
-      const isTestAccount = testAccounts.includes(email);
-      
-      if (isTestAccount) {
-        // For test accounts, use mock data directly from service
-        const meData = await companyService.getMe();
-        // Load profile picture from localStorage
-        const profileKey = `companyProfile_${email}`;
-        const storedProfile = localStorage.getItem(profileKey);
-        const stored = storedProfile ? JSON.parse(storedProfile) : {};
-        const merged = {
-          companyName: meData?.companyName || '',
-          hrName: meData?.hrName || '',
-          email: email || meData?.email || '',
-          industry: meData?.industry || '',
-          province: meData?.province || '',
-          profilePicture: stored.profilePicture || null,
-        };
-        setProfileData(merged);
-        if (merged.profilePicture) {
-          setProfilePicturePreview(merged.profilePicture);
-        }
-        return;
-      }
-      
-      // For registered users
-      const meData = await companyService.getMe();
-      
-      // Get from localStorage - store per email to avoid conflicts
-      const profileKey = `companyProfile_${email}`;
-      const storedProfile = localStorage.getItem(profileKey);
-      const stored = storedProfile ? JSON.parse(storedProfile) : {};
-      
-      const merged = {
-        companyName: stored.companyName || meData?.companyName || '',
-        hrName: stored.hrName || meData?.hrName || '',
-        email: email || stored.email || meData?.email || '',
-        industry: stored.industry || meData?.industry || '',
-        province: stored.province || meData?.province || '',
-        profilePicture: stored.profilePicture || null,
-      };
-      
-      setProfileData(merged);
-      if (merged.profilePicture) {
-        setProfilePicturePreview(merged.profilePicture);
-      }
-    } catch (error) {
-      console.error('Failed to load profile data:', error);
-    }
-  };
 
   const provinces = [
     'Bangkok',
@@ -91,6 +31,7 @@ const CompanyEditProfile = () => {
     'Khon Kaen',
     'Phuket',
     'Songkhla',
+    'Other',
   ];
 
   const industries = [
@@ -101,302 +42,248 @@ const CompanyEditProfile = () => {
     'Retail',
     'Healthcare',
     'Education',
+    'Marketing',
     'Other',
   ];
 
-  const handleEdit = (field) => {
-    setEditingField(field);
-    setEditValues({
-      ...editValues,
-      [field]: profileData[field],
-    });
-  };
+  const workModeOptions = ['On-site', 'Hybrid', 'Remote'];
 
-  const handleSaveField = (field) => {
-    const updatedData = {
-      ...profileData,
-      [field]: editValues[field],
-    };
-    setProfileData(updatedData);
-    
-    // Save to localStorage - store per email to avoid conflicts
-    const profileKey = `companyProfile_${email}`;
-    const storedProfile = localStorage.getItem(profileKey);
-    const stored = storedProfile ? JSON.parse(storedProfile) : {};
-    const updated = { ...stored, ...updatedData };
-    localStorage.setItem(profileKey, JSON.stringify(updated));
-    
-    // Trigger custom event to notify other components
-    window.dispatchEvent(new CustomEvent('profileUpdated', { 
-      detail: { field, value: editValues[field], profile: updatedData } 
-    }));
-    
-    setEditingField(null);
-    setEditValues({});
-  };
+  useEffect(() => {
+    loadProfile();
+  }, [email]);
 
-  const handleCancel = () => {
-    setEditingField(null);
-    setEditValues({});
-  };
-
-  const handleChange = (field, value) => {
-    setEditValues({
-      ...editValues,
-      [field]: value,
-    });
-  };
-
-  const handleProfilePictureChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('Please select an image file');
-        return;
-      }
-      
-      if (file.size > 5 * 1024 * 1024) {
-        alert('Image size should be less than 5MB');
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
-        const updatedData = {
-          ...profileData,
-          profilePicture: base64String,
-        };
-        setProfileData(updatedData);
-        setProfilePicturePreview(base64String);
-        
-        // Save to localStorage immediately
-        const profileKey = `companyProfile_${email}`;
-        const storedProfile = localStorage.getItem(profileKey);
-        const stored = storedProfile ? JSON.parse(storedProfile) : {};
-        const updated = { ...stored, ...updatedData };
-        localStorage.setItem(profileKey, JSON.stringify(updated));
-        
-        // Trigger custom event
-        window.dispatchEvent(new CustomEvent('profileUpdated', { 
-          detail: { field: 'profilePicture', value: base64String, profile: updatedData } 
-        }));
-      };
-      reader.readAsDataURL(file);
+  const loadProfile = async () => {
+    try {
+      const profile = await companyProfileService.getProfile(email);
+      setFormData({
+        companyName: profile.companyName || '',
+        industry: profile.industry || '',
+        province: profile.province || '',
+        website: profile.website || '',
+        contactEmail: profile.contactEmail || email || '',
+        phone: profile.phone || '',
+        about: profile.about || '',
+        workModes: profile.workModes || [],
+      });
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRemoveProfilePicture = () => {
-    const updatedData = {
-      ...profileData,
-      profilePicture: null,
-    };
-    setProfileData(updatedData);
-    setProfilePicturePreview(null);
-    
-    // Save to localStorage
-    const profileKey = `companyProfile_${email}`;
-    const storedProfile = localStorage.getItem(profileKey);
-    const stored = storedProfile ? JSON.parse(storedProfile) : {};
-    const updated = { ...stored, ...updatedData };
-    localStorage.setItem(profileKey, JSON.stringify(updated));
-    
-    // Trigger custom event
-    window.dispatchEvent(new CustomEvent('profileUpdated', { 
-      detail: { field: 'profilePicture', value: null, profile: updatedData } 
+  const handleChange = (field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
     }));
   };
 
-  const renderEditableField = (field, label, type = 'text', options = null) => {
-    const isEditing = editingField === field;
-    const value = isEditing ? (editValues[field] ?? profileData[field]) : profileData[field];
-
-    return (
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-2">
-          <label
-            className="block text-sm font-normal"
-            style={{ color: '#6B7C93', fontSize: '14px' }}
-          >
-            {label}
-          </label>
-          {!isEditing ? (
-            <button
-              onClick={() => handleEdit(field)}
-              className="p-1 hover:bg-gray-100 rounded"
-              style={{ color: '#3F6FA6' }}
-            >
-              <Edit size={16} />
-            </button>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleSaveField(field)}
-                className="p-1 hover:bg-gray-100 rounded"
-                style={{ color: '#10B981' }}
-              >
-                <Check size={16} />
-              </button>
-              <button
-                onClick={handleCancel}
-                className="p-1 hover:bg-gray-100 rounded"
-                style={{ color: '#EF4444' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
-        </div>
-        {isEditing ? (
-          options ? (
-            <select
-              value={value}
-              onChange={(e) => handleChange(field, e.target.value)}
-              className="w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-              style={{
-                height: '44px',
-                background: '#FFFFFF',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                fontSize: '14px',
-              }}
-            >
-              <option value="">Select {label.toLowerCase()}</option>
-              {options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type={type}
-              value={value}
-              onChange={(e) => handleChange(field, e.target.value)}
-              placeholder={`Enter your ${label.toLowerCase()}`}
-              className="w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-              style={{
-                height: '44px',
-                background: '#FFFFFF',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                fontSize: '14px',
-              }}
-            />
-          )
-        ) : (
-          <div
-            className="w-full"
-            style={{
-              height: '44px',
-              background: '#F5F7FB',
-              border: '1px solid #D6DEE9',
-              borderRadius: '8px',
-              padding: '12px 14px',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              color: value ? '#2C3E5B' : '#6B7C93',
-            }}
-          >
-            {value || `No ${label.toLowerCase()} set`}
-          </div>
-        )}
-      </div>
-    );
+  const handleWorkModeToggle = (mode) => {
+    setFormData((prev) => ({
+      ...prev,
+      workModes: prev.workModes.includes(mode)
+        ? prev.workModes.filter((m) => m !== mode)
+        : [...prev.workModes, mode],
+    }));
   };
 
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center py-6 sm:py-12 px-4"
-      style={{ background: '#E9EEF5' }}
-    >
-      <CardShell>
-        <h1
-          className="text-center mb-6 sm:mb-8 font-bold text-2xl sm:text-3xl md:text-[34px]"
-          style={{ color: '#2C3E5B' }}
-        >
-          Edit Company Profile
-        </h1>
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
 
-        <div className="max-w-md mx-auto">
-          {/* Profile Picture */}
-          <div className="mb-6 text-center">
-            <label className="block text-sm font-normal mb-2" style={{ color: '#6B7C93', fontSize: '14px' }}>
-              Profile Picture
-            </label>
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                {profilePicturePreview ? (
-                  <img
-                    src={profilePicturePreview}
-                    alt="Profile"
-                    className="w-32 h-32 rounded-full object-cover border-4"
-                    style={{ borderColor: '#D6DEE9' }}
-                  />
-                ) : (
-                  <div
-                    className="w-32 h-32 rounded-full flex items-center justify-center text-white text-4xl font-semibold"
-                    style={{ background: '#3F6FA6' }}
-                  >
-                    {profileData.companyName?.[0] || email?.[0]?.toUpperCase() || 'C'}
-                  </div>
-                )}
-                <label
-                  htmlFor="profilePictureInput"
-                  className="absolute bottom-0 right-0 w-10 h-10 rounded-full flex items-center justify-center cursor-pointer"
-                  style={{ background: '#3F6FA6' }}
-                >
-                  <Camera size={20} className="text-white" />
-                  <input
-                    id="profilePictureInput"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleProfilePictureChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <label
-                  htmlFor="profilePictureInput"
-                  className="px-4 py-2 rounded-lg cursor-pointer text-sm"
-                  style={{ background: '#3F6FA6', color: 'white' }}
-                >
-                  <Upload size={16} className="inline mr-2" />
-                  {profilePicturePreview ? 'Change Photo' : 'Upload Photo'}
-                </label>
-                {profilePicturePreview && (
+    try {
+      const result = await companyProfileService.saveProfile(email, formData);
+      if (result.success) {
+        navigate('/company/profile');
+      } else {
+        alert(result.error || 'Failed to save profile');
+      }
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      alert('Failed to save profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-6">
+        <div className="text-center" style={{ color: '#6B7C93' }}>Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-6">
+      <button
+        onClick={() => navigate('/company/profile')}
+        className="flex items-center gap-2 mb-6 text-sm"
+        style={{ color: '#3F6FA6' }}
+      >
+        <ArrowLeft size={16} />
+        Back to Profile
+      </button>
+
+      <h2 className="text-2xl font-bold mb-6" style={{ color: '#2C3E5B' }}>
+        Edit Company Profile
+      </h2>
+
+      <form onSubmit={handleSubmit}>
+        <div
+          className="rounded-xl p-6 mb-6"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid #D6DEE9',
+            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+          }}
+        >
+          <div className="space-y-6">
+            <LabeledInput
+              label="Company Name *"
+              value={formData.companyName}
+              onChange={(e) => handleChange('companyName', e.target.value)}
+              required
+              placeholder="Enter company name"
+            />
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#2C3E5B' }}>
+                Industry
+              </label>
+              <select
+                value={formData.industry}
+                onChange={(e) => handleChange('industry', e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border"
+                style={{
+                  background: '#FFFFFF',
+                  borderColor: '#CBD5E1',
+                  color: '#2C3E5B',
+                }}
+              >
+                <option value="">Select industry</option>
+                {industries.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#2C3E5B' }}>
+                Province
+              </label>
+              <select
+                value={formData.province}
+                onChange={(e) => handleChange('province', e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border"
+                style={{
+                  background: '#FFFFFF',
+                  borderColor: '#CBD5E1',
+                  color: '#2C3E5B',
+                }}
+              >
+                <option value="">Select province</option>
+                {provinces.map((prov) => (
+                  <option key={prov} value={prov}>
+                    {prov}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#2C3E5B' }}>
+                Work Modes
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {workModeOptions.map((mode) => (
                   <button
-                    onClick={handleRemoveProfilePicture}
-                    className="px-4 py-2 rounded-lg text-sm"
-                    style={{ background: '#EF4444', color: 'white' }}
+                    key={mode}
+                    type="button"
+                    onClick={() => handleWorkModeToggle(mode)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      formData.workModes.includes(mode)
+                        ? 'text-white'
+                        : 'text-gray-700'
+                    }`}
+                    style={{
+                      background: formData.workModes.includes(mode) ? '#3F6FA6' : '#F5F7FB',
+                      border: `1px solid ${formData.workModes.includes(mode) ? '#3F6FA6' : '#D6DEE9'}`,
+                    }}
                   >
-                    Remove
+                    {mode}
                   </button>
-                )}
+                ))}
               </div>
             </div>
-          </div>
 
-          {renderEditableField('companyName', 'Company Name', 'text')}
-          {renderEditableField('hrName', 'HR Name', 'text')}
-          {renderEditableField('email', 'Email', 'email')}
-          {renderEditableField('industry', 'Industry', 'select', industries)}
-          {renderEditableField('province', 'Province/Area', 'select', provinces)}
+            <LabeledInput
+              label="Website"
+              type="url"
+              value={formData.website}
+              onChange={(e) => handleChange('website', e.target.value)}
+              placeholder="https://example.com"
+            />
 
-          <div className="flex flex-col gap-3 mt-8">
-            <ActionButton onClick={() => navigate('/company/profile')} className="w-full">
-              Back to Profile
-            </ActionButton>
+            <LabeledInput
+              label="Contact Email"
+              type="email"
+              value={formData.contactEmail}
+              onChange={(e) => handleChange('contactEmail', e.target.value)}
+              placeholder="contact@company.com"
+            />
+
+            <LabeledInput
+              label="Phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleChange('phone', e.target.value)}
+              placeholder="+66 XX XXX XXXX"
+            />
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#2C3E5B' }}>
+                About
+              </label>
+              <textarea
+                value={formData.about}
+                onChange={(e) => handleChange('about', e.target.value)}
+                rows={6}
+                className="w-full px-4 py-2 rounded-lg border resize-none"
+                style={{
+                  background: '#FFFFFF',
+                  borderColor: '#CBD5E1',
+                  color: '#2C3E5B',
+                }}
+                placeholder="Tell us about your company..."
+              />
+            </div>
           </div>
         </div>
-      </CardShell>
+
+        <div className="flex gap-3">
+          <ActionButton
+            type="submit"
+            disabled={saving || !formData.companyName.trim()}
+            className="flex items-center gap-2"
+          >
+            <Save size={18} />
+            {saving ? 'Saving...' : 'Save Profile'}
+          </ActionButton>
+          <ActionButton
+            type="button"
+            onClick={() => navigate('/company/profile')}
+            style={{ background: '#6B7C93' }}
+          >
+            Cancel
+          </ActionButton>
+        </div>
+      </form>
     </div>
   );
 };
 
 export default CompanyEditProfile;
-

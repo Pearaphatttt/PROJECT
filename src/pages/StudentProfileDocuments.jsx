@@ -2,27 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Upload, FileText, ArrowLeft } from 'lucide-react';
 import ActionButton from '../components/ActionButton';
+import { studentService } from '../services/studentService';
+import { useAuth } from '../state/authStore';
 
 const StudentProfileDocuments = () => {
   const navigate = useNavigate();
+  const { email } = useAuth();
   const [resumes, setResumes] = useState([]);
 
   useEffect(() => {
     loadResumes();
-  }, []);
+  }, [email]);
 
-  const loadResumes = () => {
-    const stored = localStorage.getItem('studentResumeHistory');
-    if (stored) {
-      try {
-        setResumes(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to load resume history:', e);
-      }
+  const loadResumes = async () => {
+    try {
+      const history = await studentService.getResumeHistory(email);
+      setResumes(history);
+    } catch (e) {
+      console.error('Failed to load resume history:', e);
     }
   };
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files[0];
     if (file) {
       const newResume = {
@@ -33,10 +34,8 @@ const StudentProfileDocuments = () => {
       };
       const updated = [newResume, ...resumes];
       setResumes(updated);
-      localStorage.setItem('studentResumeHistory', JSON.stringify(updated));
-      localStorage.setItem('studentResume', JSON.stringify(newResume));
-      // Mark that resume is uploaded
-      localStorage.setItem('hasResume', 'true');
+      await studentService.saveResumeHistory(updated, email);
+      await studentService.saveResume(newResume, email);
     }
   };
 

@@ -17,15 +17,26 @@ import StudentProfileSettings from './pages/StudentProfileSettings';
 import CompanyDashboard from './pages/CompanyDashboard';
 import CompanyProfile from './pages/CompanyProfile';
 import CompanyEditProfile from './pages/CompanyEditProfile';
+import CompanyNotifications from './pages/CompanyNotifications';
+import CompanyInternshipsList from './pages/CompanyInternshipsList';
+import CompanyInternshipForm from './pages/CompanyInternshipForm';
+import CompanyCandidates from './pages/CompanyCandidates';
+import CompanyChat from './pages/CompanyChat';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsers from './pages/AdminUsers';
+import AdminInternships from './pages/AdminInternships';
 import Placeholder from './pages/Placeholder';
 import ForgotPassword from './pages/ForgotPassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import StudentLayout from './components/StudentLayout';
+import AdminLayout from './layouts/AdminLayout';
+import CompanyLayout from './layouts/CompanyLayout';
 
 function App() {
   return (
-    <Router>
-      <Routes>
+    <div className="w-full overflow-x-hidden">
+      <Router>
+        <Routes>
         <Route path="/auth" element={<Auth />} />
         <Route path="/auth/forgot" element={<ForgotPassword />} />
         <Route path="/register" element={<RegisterRoleSelect />} />
@@ -128,7 +139,69 @@ function App() {
           path="/company/dashboard"
           element={
             <ProtectedRoute requiredRole="company">
-              <CompanyDashboard />
+              <CompanyLayout>
+                <CompanyDashboard />
+              </CompanyLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/internships"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyLayout>
+                <CompanyInternshipsList />
+              </CompanyLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/internships/new"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyLayout>
+                <CompanyInternshipForm />
+              </CompanyLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/internships/:id/edit"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyLayout>
+                <CompanyInternshipForm />
+              </CompanyLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/candidates"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyLayout>
+                <CompanyCandidates />
+              </CompanyLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/notifications"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyLayout>
+                <CompanyNotifications />
+              </CompanyLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/chat"
+          element={
+            <ProtectedRoute requiredRole="company">
+              <CompanyLayout>
+                <CompanyChat />
+              </CompanyLayout>
             </ProtectedRoute>
           }
         />
@@ -136,7 +209,9 @@ function App() {
           path="/company/profile"
           element={
             <ProtectedRoute requiredRole="company">
-              <CompanyProfile />
+              <CompanyLayout>
+                <CompanyProfile />
+              </CompanyLayout>
             </ProtectedRoute>
           }
         />
@@ -144,15 +219,52 @@ function App() {
           path="/company/profile/edit"
           element={
             <ProtectedRoute requiredRole="company">
-              <CompanyEditProfile />
+              <CompanyLayout>
+                <CompanyEditProfile />
+              </CompanyLayout>
             </ProtectedRoute>
           }
         />
         <Route path="/company/internship/edit" element={<CompanyEditInternship />} />
+        
+        {/* Admin Routes */}
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminLayout>
+                <AdminUsers />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/internships"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminLayout>
+                <AdminInternships />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        
         <Route path="/placeholder" element={<Placeholder />} />
         <Route path="/" element={<Navigate to="/auth" replace />} />
-      </Routes>
-    </Router>
+        </Routes>
+      </Router>
+    </div>
   );
 }
 

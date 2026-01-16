@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/authStore';
 import { useStudentStore } from '../state/studentStore';
 import { internshipService } from '../services/internshipService';
+import { studentService } from '../services/studentService';
 import ActionButton from '../components/ActionButton';
 import { Heart, Eye, X, FileText } from 'lucide-react';
 
@@ -22,6 +23,7 @@ const StudentMatching = () => {
 
   const [internships, setInternships] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasResume, setHasResume] = useState(false);
   const [filters, setFilters] = useState({
     distance: '',
     category: '',
@@ -30,12 +32,13 @@ const StudentMatching = () => {
   const [sort, setSort] = useState('matchScore');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Check if user has resume
-  const testAccounts = ['test@stu.com', 'test@hr.com'];
-  const isTestAccount = testAccounts.includes(email);
-  const hasResume = isTestAccount || 
-    localStorage.getItem('hasResume') === 'true' || 
-    localStorage.getItem('studentResume') !== null;
+  useEffect(() => {
+    const checkResume = async () => {
+      const hasRes = await studentService.hasResume(email);
+      setHasResume(hasRes);
+    };
+    checkResume();
+  }, [email]);
 
   useEffect(() => {
     if (hasResume) {
@@ -109,12 +112,12 @@ const StudentMatching = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-6">
+    <div className="w-full py-6">
       <div className="mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold mb-2" style={{ color: '#2C3E5B' }}>
+        <h2 className="text-lg sm:text-xl font-bold mb-2" style={{ color: '#2C3E5B' }}>
           Find Your Perfect Match
         </h2>
-        <p className="text-sm" style={{ color: '#6B7C93' }}>
+        <p className="text-sm sm:text-base" style={{ color: '#6B7C93' }}>
           Browse available internships and find the best fit for you
         </p>
       </div>
@@ -275,7 +278,7 @@ const StudentMatching = () => {
       {/* Resume Required Message */}
       {!hasResume && (
         <div
-          className="rounded-xl p-8 sm:p-12 text-center mb-6"
+          className="rounded-xl p-4 sm:p-5 text-center mb-6"
           style={{
             background: '#F5F7FB',
             border: '1px solid #D6DEE9',
@@ -289,10 +292,10 @@ const StudentMatching = () => {
             >
               <FileText size={32} style={{ color: '#3F6FA6' }} />
             </div>
-            <h3 className="text-xl font-bold mb-3" style={{ color: '#2C3E5B' }}>
+            <h3 className="text-lg sm:text-xl font-bold mb-3" style={{ color: '#2C3E5B' }}>
               Resume Required
             </h3>
-            <p className="text-sm mb-6" style={{ color: '#6B7C93' }}>
+            <p className="text-sm sm:text-base mb-6" style={{ color: '#6B7C93' }}>
               กรุณาอัปโหลด Resume ก่อนเพื่อให้ระบบสามารถวิเคราะห์และแนะนำตำแหน่งงานที่เหมาะสมกับคุณได้
             </p>
             <ActionButton
@@ -320,7 +323,7 @@ const StudentMatching = () => {
             return (
               <div
                 key={internship.id}
-                className="rounded-xl p-4 sm:p-6"
+                className="rounded-xl p-4 sm:p-5"
                 style={{
                   background: '#F5F7FB',
                   border: '1px solid #D6DEE9',
@@ -338,12 +341,20 @@ const StudentMatching = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2 mb-1">
-                          <h3 className="font-semibold text-lg" style={{ color: '#2C3E5B' }}>
+                          <h3
+                            className="font-semibold text-lg whitespace-normal break-words"
+                            style={{ color: '#2C3E5B' }}
+                            title={internship.title}
+                          >
                             {internship.title}
                           </h3>
                           {getStatusBadge(internship.id)}
                         </div>
-                        <p className="text-sm mb-1" style={{ color: '#6B7C93' }}>
+                        <p
+                          className="text-sm sm:text-base mb-1 whitespace-normal break-words"
+                          style={{ color: '#6B7C93' }}
+                          title={internship.company}
+                        >
                           {internship.company}
                         </p>
                         <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: '#6B7C93' }}>

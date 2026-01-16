@@ -37,20 +37,6 @@ const StudentProfile = () => {
         studentService.getSummary(),
       ]);
       
-      // Load profile picture from localStorage
-      const profileKey = `studentProfile_${email}`;
-      const storedProfile = localStorage.getItem(profileKey);
-      if (storedProfile) {
-        try {
-          const stored = JSON.parse(storedProfile);
-          if (stored.profilePicture) {
-            meData.profilePicture = stored.profilePicture;
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-      }
-      
       setMe(meData);
       setSummary(summaryData);
     } catch (error) {
@@ -60,14 +46,12 @@ const StudentProfile = () => {
     }
   };
 
-  const loadResume = () => {
-    const stored = localStorage.getItem('studentResume');
-    if (stored) {
-      try {
-        setResume(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to load resume:', e);
-      }
+  const loadResume = async () => {
+    try {
+      const resumeData = await studentService.getResume(email);
+      setResume(resumeData);
+    } catch (e) {
+      console.error('Failed to load resume:', e);
     }
   };
 
@@ -79,11 +63,9 @@ const StudentProfile = () => {
     );
   }
 
-  const applicationsCount = summary
-    ? summary.applications + appliedInternshipIds.size
-    : appliedInternshipIds.size;
-  const matchesCount = summary ? summary.matches : 0;
-  const interviewsCount = summary ? summary.interviews : 0;
+  const applicationsCount = appliedInternshipIds.size;
+  const matchesCount = matchedInternshipIds.size;
+  const interviewsCount = summary?.interviews || 0;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-6">

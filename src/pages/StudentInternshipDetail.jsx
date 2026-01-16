@@ -3,7 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/authStore';
 import { useStudentStore } from '../state/studentStore';
 import { internshipService } from '../services/internshipService';
+import { applicationService } from '../services/applicationService';
 import { notificationService } from '../services/notificationService';
+import { studentService } from '../services/studentService';
 import { USE_MOCK } from '../config/env';
 import ActionButton from '../components/ActionButton';
 import { Heart, ArrowLeft, CheckCircle, FileText } from 'lucide-react';
@@ -21,17 +23,27 @@ const StudentInternshipDetail = () => {
     saveInternship,
     unsaveInternship,
     matchInternship,
-    addNotification,
   } = useStudentStore();
 
   const [internship, setInternship] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hasResume, setHasResume] = useState(false);
   const [activeTab, setActiveTab] = useState('extracted');
   const [simulating, setSimulating] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState(null);
+  
+  useEffect(() => {
+    const checkResume = async () => {
+      const hasRes = await studentService.hasResume(email);
+      setHasResume(hasRes);
+    };
+    checkResume();
+  }, [email]);
 
   useEffect(() => {
     loadInternship();
-  }, [id]);
+    loadApplicationStatus();
+  }, [id, email]);
 
   const loadInternship = async () => {
     setLoading(true);
@@ -45,13 +57,29 @@ const StudentInternshipDetail = () => {
     }
   };
 
+  const loadApplicationStatus = async () => {
+    if (!email || !id) return;
+    try {
+      const status = await applicationService.getStatus(email, id);
+      setApplicationStatus(status);
+    } catch (error) {
+      console.error('Failed to load application status:', error);
+    }
+  };
+
   const handleApply = async () => {
-    if (appliedInternshipIds.has(id)) {
+    if (!email) return;
+    
+    if (applicationStatus === 'applied' || appliedInternshipIds.has(id)) {
+      await applicationService.remove(email, id);
       await internshipService.withdraw(id);
       withdrawFromInternship(id);
+      setApplicationStatus(null);
     } else {
+      // internshipService.apply() handles both applicationService.setStatus() and notification
       await internshipService.apply(id);
       applyToInternship(id);
+      setApplicationStatus('applied');
     }
   };
 
@@ -71,13 +99,13 @@ const StudentInternshipDetail = () => {
     try {
       await internshipService.simulateHrAccept(id);
       matchInternship(id);
-      addNotification({
+      await notificationService.pushNotification('student', email, {
         id: `notif-${Date.now()}`,
         type: 'match',
         title: `You are matched with ${internship.company}!`,
         message: `Congratulations! Your application for ${internship.title} has been accepted.`,
-        timestamp: new Date().toISOString(),
-        read: false,
+        createdAt: Date.now(),
+        readAt: null,
         internshipId: id,
       });
     } catch (error) {
@@ -87,12 +115,6 @@ const StudentInternshipDetail = () => {
     }
   };
 
-  // Check if user has resume
-  const testAccounts = ['test@stu.com', 'test@hr.com'];
-  const isTestAccount = testAccounts.includes(email);
-  const hasResume = isTestAccount || 
-    localStorage.getItem('hasResume') === 'true' || 
-    localStorage.getItem('studentResume') !== null;
 
   if (loading) {
     return (
@@ -154,9 +176,9 @@ const StudentInternshipDetail = () => {
     );
   }
 
-  const isApplied = appliedInternshipIds.has(id);
+  const isApplied = applicationStatus === 'applied' || appliedInternshipIds.has(id);
+  const isMatched = applicationStatus === 'matched';
   const isSaved = savedInternshipIds.has(id);
-  const isMatched = matchedInternshipIds.has(id);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-6">

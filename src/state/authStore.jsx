@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { readJSON, writeJSON, removeKey } from '../utils/storage';
+import { STORAGE_KEYS } from '../config/storageKeys';
 
 const AuthContext = createContext(null);
+
+const USERS_KEY = STORAGE_KEYS.REGISTERED_USERS;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -19,31 +23,51 @@ export const AuthProvider = ({ children }) => {
 
   // Load auth state from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem('auth');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setAuthState(parsed);
-      } catch (e) {
-        localStorage.removeItem('auth');
+    const stored = readJSON(STORAGE_KEYS.AUTH);
+    if (stored && stored.isLoggedIn && stored.email) {
+      // Check if user is still active (not deleted)
+      const registeredUsers = readJSON(USERS_KEY, {});
+      const user = registeredUsers[stored.email];
+      
+      // If user exists in registeredUsers and is deleted, force logout
+      if (user && user.status === 'deleted') {
+        setAuthState({
+          isLoggedIn: false,
+          role: null,
+          email: null,
+        });
+        removeKey(STORAGE_KEYS.AUTH);
+        return;
       }
+      
+      // Check demo accounts (they're always active)
+      const demoAccounts = ['admin', 'test@stu.com', 'test@hr.com'];
+      if (demoAccounts.includes(stored.email)) {
+        setAuthState(stored);
+        return;
+      }
+      
+      // If user is not in registeredUsers and not a demo account, force logout
+      if (!user && !demoAccounts.includes(stored.email)) {
+        setAuthState({
+          isLoggedIn: false,
+          role: null,
+          email: null,
+        });
+        removeKey(STORAGE_KEYS.AUTH);
+        return;
+      }
+      
+      setAuthState(stored);
     }
   }, []);
 
   const getRegisteredUsers = () => {
-    const stored = localStorage.getItem('registeredUsers');
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        return {};
-      }
-    }
-    return {};
+    return readJSON(USERS_KEY, {});
   };
 
   const saveRegisteredUsers = (users) => {
-    localStorage.setItem('registeredUsers', JSON.stringify(users));
+    writeJSON(USERS_KEY, users);
   };
 
   const register = (email, password, role) => {
@@ -75,27 +99,46 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = (email, password) => {
-    // Test credentials
-    const testUsers = {
+    // Demo accounts (always active, cannot be deleted)
+    const demoUsers = {
       'test@stu.com': {
         password: 'P@ssw0rd',
         role: 'student',
+        status: 'active',
       },
       'test@hr.com': {
         password: 'P@ssw0rd',
         role: 'company',
+        status: 'active',
+      },
+      'admin': {
+        password: 'P@ssw0rd',
+        role: 'admin',
+        status: 'active',
       },
     };
 
-    // Check test users first
-    let user = testUsers[email];
+    // Check demo users first
+    let user = demoUsers[email];
     
-    // If not found in test users, check registered users
+    // If not found in demo users, check registered users
     if (!user) {
       const registeredUsers = getRegisteredUsers();
       user = registeredUsers[email];
+      
+      // If user not found in registered users, reject
+      if (!user) {
+        return { success: false, error: 'Invalid email or password' };
+      }
+      
+      // Check if user is deleted
+      const userStatus = user.status || 'active';
+      if (userStatus === 'deleted') {
+        return { success: false, error: 'Account has been disabled. Please contact administrator.' };
+      }
     }
 
+    // Verify password
     if (user && user.password === password) {
       const newState = {
         isLoggedIn: true,
@@ -103,9 +146,10 @@ export const AuthProvider = ({ children }) => {
         email: email,
       };
       setAuthState(newState);
-      localStorage.setItem('auth', JSON.stringify(newState));
+      writeJSON(STORAGE_KEYS.AUTH, newState);
       return { success: true, role: user.role };
     }
+    
     return { success: false, error: 'Invalid email or password' };
   };
 
@@ -115,7 +159,7 @@ export const AuthProvider = ({ children }) => {
       role: null,
       email: null,
     });
-    localStorage.removeItem('auth');
+    removeKey(STORAGE_KEYS.AUTH);
   };
 
   return (

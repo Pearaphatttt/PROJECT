@@ -37,75 +37,40 @@ const StudentEditProfile = () => {
   const [profilePicturePreview, setProfilePicturePreview] = useState(null);
 
   useEffect(() => {
-    loadProfileData();
-  }, []);
+    if (email) {
+      loadProfileData();
+    }
+  }, [email]);
 
   const loadProfileData = async () => {
     try {
-      // Check if it's a test account first
-      const testAccounts = ['test@stu.com', 'test@hr.com'];
-      const isTestAccount = testAccounts.includes(email);
-      
-      if (isTestAccount) {
-        // For test accounts, use mock data directly
-        const meData = await studentService.getMe();
-        // Load profile picture from localStorage
-        const profileKey = `studentProfile_${email}`;
-        const storedProfile = localStorage.getItem(profileKey);
-        const stored = storedProfile ? JSON.parse(storedProfile) : {};
-        const merged = {
-          fullName: meData?.fullName || '',
-          email: email || meData?.email || '',
-          phone: meData?.phone || '',
-          skills: meData?.skills || stored.skills || [],
-          educationLevel: meData?.educationLevel || stored.educationLevel || '',
-          fieldOfStudy: meData?.fieldOfStudy || stored.fieldOfStudy || '',
-          institution: meData?.institution || stored.institution || '',
-          province: meData?.province || stored.province || '',
-          profilePicture: stored.profilePicture || null,
-        };
-        setProfileData(merged);
-        if (merged.profilePicture) {
-          setProfilePicturePreview(merged.profilePicture);
-        }
+      if (!email) {
+        console.warn('StudentEditProfile: No email found in auth state');
         return;
       }
       
-      // For registered users, try to get from service first (which loads from localStorage)
+      // Get profile data from service (which handles localStorage internally)
       const meData = await studentService.getMe();
       
-      // Get from localStorage - store per email to avoid conflicts
-      const profileKey = `studentProfile_${email}`;
-      const storedProfile = localStorage.getItem(profileKey);
-      const stored = storedProfile ? JSON.parse(storedProfile) : {};
+      // Debug: Check what we got
+      console.log('StudentEditProfile - Current email:', email);
+      console.log('StudentEditProfile - meData from service:', meData);
       
-      // Also check old format for backward compatibility (only if email matches)
-      const oldStoredProfile = localStorage.getItem('studentProfile');
-      let oldStored = {};
-      if (oldStoredProfile) {
-        try {
-          const parsed = JSON.parse(oldStoredProfile);
-          // Only use old format if email matches
-          if (parsed.email === email) {
-            oldStored = parsed;
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-      }
-      
-      // Merge extracted data (from register), stored data, and service data
+      // Ensure we use the current email, not the one from meData
+      // Merge extracted data (from register) with service data
       const merged = {
-        fullName: extracted.fullName || stored.fullName || oldStored.fullName || meData?.fullName || '',
-        email: email || extracted.email || stored.email || oldStored.email || meData?.email || '',
-        phone: extracted.phone || stored.phone || oldStored.phone || meData?.phone || '',
-        skills: extracted.skills || stored.skills || oldStored.skills || meData?.skills || [],
-        educationLevel: extracted.educationLevel || stored.educationLevel || oldStored.educationLevel || meData?.educationLevel || '',
-        fieldOfStudy: extracted.fieldOfStudy || stored.fieldOfStudy || oldStored.fieldOfStudy || meData?.fieldOfStudy || '',
-        institution: extracted.institution || stored.institution || oldStored.institution || meData?.institution || '',
-        province: extracted.province || stored.province || oldStored.province || meData?.province || '',
-        profilePicture: stored.profilePicture || oldStored.profilePicture || null,
+        fullName: extracted.fullName || meData?.fullName || '',
+        email: email, // Always use current email from auth
+        phone: extracted.phone || meData?.phone || '',
+        skills: extracted.skills || meData?.skills || [],
+        educationLevel: extracted.educationLevel || meData?.educationLevel || '',
+        fieldOfStudy: extracted.fieldOfStudy || meData?.fieldOfStudy || '',
+        institution: extracted.institution || meData?.institution || '',
+        province: extracted.province || meData?.province || '',
+        profilePicture: meData?.profilePicture || null,
       };
+      
+      console.log('StudentEditProfile - Merged profile data:', merged);
       
       setProfileData(merged);
       if (merged.profilePicture) {
@@ -136,28 +101,15 @@ const StudentEditProfile = () => {
     });
   };
 
-  const handleSaveField = (field) => {
+  const handleSaveField = async (field) => {
     const updatedData = {
       ...profileData,
       [field]: editValues[field],
     };
     setProfileData(updatedData);
     
-    // Save to localStorage - store per email to avoid conflicts
-    const profileKey = `studentProfile_${email}`;
-    const storedProfile = localStorage.getItem(profileKey);
-    const stored = storedProfile ? JSON.parse(storedProfile) : {};
-    const updated = { ...stored, ...updatedData };
-    localStorage.setItem(profileKey, JSON.stringify(updated));
-    
-    // Also update old format for backward compatibility (but only if email matches)
-    const oldStoredProfile = localStorage.getItem('studentProfile');
-    if (oldStoredProfile) {
-      const oldStored = JSON.parse(oldStoredProfile);
-      if (oldStored.email === email) {
-        localStorage.setItem('studentProfile', JSON.stringify(updated));
-      }
-    }
+    // Save via service
+    await studentService.saveProfile(email, updatedData);
     
     // Trigger custom event to notify other components
     window.dispatchEvent(new CustomEvent('profileUpdated', { 
@@ -197,7 +149,7 @@ const StudentEditProfile = () => {
       
       // Convert to base64 for storage
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const base64String = reader.result;
         const updatedData = {
           ...profileData,
@@ -206,12 +158,8 @@ const StudentEditProfile = () => {
         setProfileData(updatedData);
         setProfilePicturePreview(base64String);
         
-        // Save to localStorage immediately
-        const profileKey = `studentProfile_${email}`;
-        const storedProfile = localStorage.getItem(profileKey);
-        const stored = storedProfile ? JSON.parse(storedProfile) : {};
-        const updated = { ...stored, ...updatedData };
-        localStorage.setItem(profileKey, JSON.stringify(updated));
+        // Save via service
+        await studentService.saveProfile(email, updatedData);
         
         // Trigger custom event
         window.dispatchEvent(new CustomEvent('profileUpdated', { 
@@ -222,7 +170,7 @@ const StudentEditProfile = () => {
     }
   };
 
-  const handleRemoveProfilePicture = () => {
+  const handleRemoveProfilePicture = async () => {
     const updatedData = {
       ...profileData,
       profilePicture: null,
@@ -230,12 +178,8 @@ const StudentEditProfile = () => {
     setProfileData(updatedData);
     setProfilePicturePreview(null);
     
-    // Save to localStorage
-    const profileKey = `studentProfile_${email}`;
-    const storedProfile = localStorage.getItem(profileKey);
-    const stored = storedProfile ? JSON.parse(storedProfile) : {};
-    const updated = { ...stored, ...updatedData };
-    localStorage.setItem(profileKey, JSON.stringify(updated));
+    // Save via service
+    await studentService.saveProfile(email, updatedData);
     
     // Trigger custom event
     window.dispatchEvent(new CustomEvent('profileUpdated', { 

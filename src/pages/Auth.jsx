@@ -30,6 +30,8 @@ const Auth = () => {
         navigate('/student/dashboard');
       } else if (result.role === 'company') {
         navigate('/company/dashboard');
+      } else if (result.role === 'admin') {
+        navigate('/admin/dashboard');
       }
     } else {
       setError(result.error);
@@ -66,8 +68,8 @@ const Auth = () => {
             </h2>
             <form onSubmit={handleLogin}>
               <LabeledInput
-                label="Email"
-                type="email"
+                label="Email or Username"
+                type="text"
                 id="email"
                 name="email"
                 value={email}
@@ -75,7 +77,7 @@ const Auth = () => {
                   setEmail(e.target.value);
                   setError('');
                 }}
-                placeholder="Enter your email"
+                placeholder="Enter your email or username"
               />
               <PasswordInput
                 label="Password"
@@ -112,7 +114,7 @@ const Auth = () => {
               </button>
             </div>
             <div className="text-center text-xs" style={{ color: '#6B7C93' }}>
-              <p className="mb-1 font-semibold">Test accounts:</p>
+              <p className="mb-1 font-semibold">Demo accounts:</p>
               <p>Student: test@stu.com / P@ssw0rd</p>
               <p>Company: test@hr.com / P@ssw0rd</p>
             </div>

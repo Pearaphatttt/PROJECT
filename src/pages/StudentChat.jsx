@@ -1,146 +1,246 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStudentStore } from '../state/studentStore';
-import { internshipService } from '../services/internshipService';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../state/authStore';
 import { chatService } from '../services/chatService';
 import ActionButton from '../components/ActionButton';
-import { Send, Paperclip, Calendar, FileText } from 'lucide-react';
+import { Send } from 'lucide-react';
 
 const StudentChat = () => {
   const navigate = useNavigate();
-  const {
-    matchedInternshipIds,
-    currentChat,
-    currentChatInternshipId,
-    setChat,
-    addChatMessage,
-  } = useStudentStore();
+  const [searchParams] = useSearchParams();
+  const { email } = useAuth();
 
-  const [internships, setInternships] = useState([]);
-  const [selectedInternshipId, setSelectedInternshipId] = useState(null);
+  const [threads, setThreads] = useState([]);
+  const [selectedThreadId, setSelectedThreadId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
+  const [loadingThreads, setLoadingThreads] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
-  const [attachedFile, setAttachedFile] = useState(null);
+  const [error, setError] = useState('');
+
   const messagesEndRef = useRef(null);
+  const mountedRef = useRef(true);
+  const selectedThreadIdRef = useRef(null);
+
+  const selectedThread = useMemo(
+    () => threads.find((t) => t.id === selectedThreadId) || null,
+    [threads, selectedThreadId]
+  );
+  const threadIdParam = searchParams.get('threadId');
+
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  const loadThreads = useCallback(async () => {
+    if (!email) {
+      if (mountedRef.current) {
+        setThreads([]);
+        setSelectedThreadId(null);
+        setMessages([]);
+        setLoadingThreads(false);
+      }
+      return;
+    }
+    try {
+      if (mountedRef.current) {
+        setLoadingThreads(true);
+      }
+      const studentThreads = await chatService.getStudentThreads(email);
+      if (!mountedRef.current) return;
+      setThreads(studentThreads || []);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load threads:', err);
+      if (mountedRef.current) {
+        setThreads([]);
+        setError('Unable to load chats.');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoadingThreads(false);
+      }
+    }
+  }, [email]);
 
   useEffect(() => {
-    loadMatchedInternships();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
-    if (selectedInternshipId) {
-      loadChatThread(selectedInternshipId);
+    loadThreads();
+  }, [loadThreads]);
+
+  useEffect(() => {
+    if (!threads || threads.length === 0) return;
+
+    if (threadIdParam) {
+      const threadFromParam = threads.find((t) => t.id === threadIdParam);
+      if (threadFromParam && threadFromParam.id !== selectedThreadId) {
+        setSelectedThreadId(threadFromParam.id);
+        return;
+      }
     }
-  }, [selectedInternshipId]);
+
+    if (!selectedThreadId) {
+      setSelectedThreadId(threads[0].id);
+      return;
+    }
+
+    const stillExists = threads.some((t) => t.id === selectedThreadId);
+    if (!stillExists) {
+      setSelectedThreadId(threads[0].id);
+    }
+  }, [threads, threadIdParam, selectedThreadId]);
+
+  const loadMessages = useCallback(async (threadId) => {
+    if (!threadId) {
+      if (mountedRef.current) {
+        setMessages([]);
+        setLoadingMessages(false);
+      }
+      return;
+    }
+    setLoadingMessages(true);
+    try {
+      const threadMessages = await chatService.getMessages(threadId);
+      if (!mountedRef.current) return;
+      if (selectedThreadIdRef.current !== threadId) return;
+      setMessages(Array.isArray(threadMessages) ? threadMessages : []);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+      if (mountedRef.current && selectedThreadIdRef.current === threadId) {
+        setMessages([]);
+        setError(err?.message || 'Unable to load messages.');
+      }
+    } finally {
+      if (mountedRef.current && selectedThreadIdRef.current === threadId) {
+        setLoadingMessages(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
+    loadMessages(selectedThreadId);
+  }, [selectedThreadId, loadMessages]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [currentChat]);
+  }, [messages, scrollToBottom]);
 
-  const loadMatchedInternships = async () => {
-    const matchedIds = Array.from(matchedInternshipIds);
-    if (matchedIds.length === 0) return;
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key === 'chatThreads') {
+        loadThreads();
+      }
+      if (selectedThreadId && event.key === `chatMessages_${selectedThreadId}`) {
+        loadMessages(selectedThreadId);
+      }
+    };
 
-    const internshipsData = await Promise.all(
-      matchedIds.map((id) => internshipService.getById(id))
-    );
-    setInternships(internshipsData.filter(Boolean));
-    if (internshipsData.length > 0 && !selectedInternshipId) {
-      setSelectedInternshipId(matchedIds[0]);
-    }
-  };
-
-  const loadChatThread = async (internshipId) => {
-    try {
-      const messages = await chatService.getThreadForMatched(internshipId);
-      setChat(internshipId, messages);
-    } catch (error) {
-      console.error('Failed to load chat:', error);
-    }
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [loadThreads, loadMessages, selectedThreadId]);
 
   const handleSendMessage = async () => {
-    if (!message.trim() && !attachedFile) return;
-    if (!selectedInternshipId) return;
+    if (sending) return;
+    if (!message.trim()) return;
+    if (!selectedThreadId || !email) return;
 
     setSending(true);
     try {
-      if (message.trim()) {
-        const newMessage = await chatService.sendMessage(selectedInternshipId, message);
-        addChatMessage(newMessage);
+      await chatService.sendMessage(selectedThreadId, {
+        senderEmail: email,
+        senderRole: 'student',
+        text: message.trim(),
+      });
+      const threadMessages = await chatService.getMessages(selectedThreadId);
+      if (mountedRef.current) {
+        setMessages(Array.isArray(threadMessages) ? threadMessages : []);
         setMessage('');
+        setError('');
       }
-      if (attachedFile) {
-        // Mock file attachment
-        const fileMessage = {
-          id: `msg-${Date.now()}`,
-          sender: 'student',
-          senderName: 'You',
-          text: `Attached: ${attachedFile.name}`,
-          timestamp: new Date().toISOString(),
-          type: 'file',
-          fileName: attachedFile.name,
-        };
-        addChatMessage(fileMessage);
-        setAttachedFile(null);
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      if (mountedRef.current) {
+        setError(err?.message || 'Unable to send message.');
       }
-    } catch (error) {
-      console.error('Failed to send message:', error);
     } finally {
-      setSending(false);
+      if (mountedRef.current) {
+        setSending(false);
+      }
     }
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setAttachedFile(file);
-    }
-  };
-
-  if (matchedInternshipIds.size === 0) {
+  if (loadingThreads) {
     return (
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-10 py-12">
-        <div
-          className="rounded-xl p-12 text-center"
-          style={{
-            background: '#F5F7FB',
-            border: '1px solid #D6DEE9',
-            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
-          }}
-        >
-          <h2 className="text-2xl font-bold mb-4" style={{ color: '#2C3E5B' }}>
-            Chat is available after you are matched
-          </h2>
-          <p className="text-sm mb-6" style={{ color: '#6B7C93' }}>
-            Once a company accepts your application, you'll be able to chat with them here.
-          </p>
-          <ActionButton 
-            onClick={() => navigate('/student/matching')}
-            style={{ padding: '0 20px' }}
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#E9EEF5' }}>
+        <div className="text-center" style={{ color: '#6B7C93' }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (threads.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#E9EEF5' }}>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-10 py-12">
+          <div
+            className="rounded-xl p-12 text-center"
+            style={{
+              background: '#F5F7FB',
+              border: '1px solid #D6DEE9',
+              boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+            }}
           >
-            Go to Matching
-          </ActionButton>
+            <h2 className="text-2xl font-bold mb-4" style={{ color: '#2C3E5B' }}>
+              No chats yet
+            </h2>
+            <p className="text-sm mb-6" style={{ color: '#6B7C93' }}>
+              Chat available after match.
+            </p>
+            <ActionButton 
+              onClick={() => navigate('/student/matching')}
+              style={{ padding: '0 20px' }}
+            >
+              Go to Matching
+            </ActionButton>
+          </div>
         </div>
       </div>
     );
   }
 
-  const selectedInternship = internships.find((i) => i.id === selectedInternshipId);
-
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-6">
+    <div className="w-full py-6">
       <h2 className="text-2xl font-bold mb-6" style={{ color: '#2C3E5B' }}>
         Chat
       </h2>
 
-      <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-200px)]">
-        {/* Internship List - Desktop */}
-        {internships.length > 1 && (
+      {error && (
+        <div
+          className="rounded-xl p-4 mb-4 text-sm"
+          style={{
+            background: '#FEE2E2',
+            color: '#991B1B',
+            border: '1px solid #FCA5A5',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-200px)] min-w-0">
+        {threads.length > 1 && (
           <div className="hidden lg:block w-64 flex-shrink-0">
             <div
               className="rounded-xl p-4 h-full overflow-y-auto"
@@ -152,52 +252,54 @@ const StudentChat = () => {
               <h3 className="font-semibold mb-3" style={{ color: '#2C3E5B' }}>
                 Matched Internships
               </h3>
-              {internships.map((internship) => (
+              {threads.map((thread) => (
                 <button
-                  key={internship.id}
-                  onClick={() => setSelectedInternshipId(internship.id)}
+                  key={thread.id}
+                  onClick={() => setSelectedThreadId(thread.id)}
                   className={`w-full text-left p-3 rounded-lg mb-2 transition-colors ${
-                    selectedInternshipId === internship.id ? 'font-semibold' : ''
+                    selectedThreadId === thread.id ? 'font-semibold' : ''
                   }`}
                   style={{
                     background:
-                      selectedInternshipId === internship.id ? '#E9EEF5' : 'transparent',
-                    color: selectedInternshipId === internship.id ? '#3F6FA6' : '#6B7C93',
+                      selectedThreadId === thread.id ? '#E9EEF5' : 'transparent',
+                    color: selectedThreadId === thread.id ? '#3F6FA6' : '#6B7C93',
                   }}
                 >
-                  <div className="font-medium">{internship.company}</div>
-                  <div className="text-xs mt-1">{internship.title}</div>
+                  <div className="font-medium">{thread.companyEmail || 'Company'}</div>
+                  <div className="text-xs mt-1">{thread.internshipTitle || 'Internship'}</div>
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col">
-          {/* Internship Selector - Mobile */}
-          {internships.length > 1 && (
+        <div className="flex-1 min-w-0 flex flex-col">
+          {threads.length > 1 && (
             <div className="lg:hidden mb-4">
               <select
-                value={selectedInternshipId || ''}
-                onChange={(e) => setSelectedInternshipId(e.target.value)}
+                value={selectedThreadId || ''}
+                onChange={(e) => {
+                  const thread = threads.find((t) => t.id === e.target.value);
+                  if (thread) {
+                    setSelectedThreadId(thread.id);
+                  }
+                }}
                 className="w-full px-4 py-2 rounded-lg border"
                 style={{
                   background: '#FFFFFF',
                   borderColor: '#CBD5E1',
                 }}
               >
-                {internships.map((internship) => (
-                  <option key={internship.id} value={internship.id}>
-                    {internship.company} - {internship.title}
+                {threads.map((thread) => (
+                  <option key={thread.id} value={thread.id}>
+                    {thread.companyEmail || 'Company'} - {thread.internshipTitle || 'Internship'}
                   </option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Chat Header */}
-          {selectedInternship && (
+          {selectedThread && (
             <div
               className="rounded-t-xl p-4 flex items-center gap-3"
               style={{
@@ -210,89 +312,61 @@ const StudentChat = () => {
                 className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-semibold"
                 style={{ background: '#3F6FA6' }}
               >
-                {selectedInternship.company?.[0] || 'C'}
+                {selectedThread.companyEmail?.[0]?.toUpperCase() || 'C'}
               </div>
               <div>
                 <div className="font-semibold" style={{ color: '#2C3E5B' }}>
-                  {selectedInternship.company}
+                  {selectedThread.companyEmail || 'Company'}
                 </div>
                 <div className="text-xs" style={{ color: '#6B7C93' }}>
-                  {selectedInternship.title}
+                  {selectedThread.internshipTitle || 'Internship'}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Messages */}
           <div
             className="flex-1 overflow-y-auto p-4"
             style={{
               background: '#FFFFFF',
               border: '1px solid #D6DEE9',
-              borderTop: selectedInternship ? 'none' : '1px solid #D6DEE9',
+              borderTop: selectedThread ? 'none' : '1px solid #D6DEE9',
               borderBottom: 'none',
             }}
           >
-            {currentChat && currentChat.length > 0 ? (
+            {loadingMessages ? (
+              <div className="text-center py-8" style={{ color: '#6B7C93' }}>
+                Loading messages...
+              </div>
+            ) : messages.length > 0 ? (
               <div className="space-y-4">
-                {currentChat.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.sender === 'student' ? 'justify-end' : 'justify-start'}`}
-                  >
+                {messages.map((msg) => {
+                  const isStudent = msg.senderEmail === email || msg.senderRole === 'student';
+                  const text = msg.text || msg.message || '';
+                  const timestamp = msg.createdAt || msg.timestamp;
+                  return (
                     <div
-                      className="max-w-[70%] rounded-lg p-3"
-                      style={{
-                        background:
-                          msg.sender === 'student' ? '#3F6FA6' : '#F5F7FB',
-                        color: msg.sender === 'student' ? '#FFFFFF' : '#2C3E5B',
-                      }}
+                      key={msg.id}
+                      className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}
                     >
-                      {msg.type === 'interview' ? (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Calendar size={16} />
-                            <span className="font-semibold">Interview Schedule</span>
-                          </div>
-                          <div className="text-sm space-y-1">
-                            <div>
-                              <strong>Date:</strong> {msg.interviewData.date}
-                            </div>
-                            <div>
-                              <strong>Time:</strong> {msg.interviewData.time} ({msg.interviewData.duration})
-                            </div>
-                            <div>
-                              <strong>Format:</strong> {msg.interviewData.format}
-                            </div>
-                            {msg.interviewData.link && (
-                              <a
-                                href={msg.interviewData.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline"
-                              >
-                                Join Meeting
-                              </a>
-                            )}
-                          </div>
+                      <div
+                        className="max-w-[70%] rounded-lg p-3"
+                        style={{
+                          background: isStudent ? '#3F6FA6' : '#F5F7FB',
+                          color: isStudent ? '#FFFFFF' : '#2C3E5B',
+                        }}
+                      >
+                        <div className="text-xs mb-1 opacity-75">
+                          {isStudent ? 'You' : msg.senderEmail || 'Company'}
                         </div>
-                      ) : msg.type === 'file' ? (
-                        <div className="flex items-center gap-2">
-                          <FileText size={16} />
-                          <span>{msg.fileName || msg.text}</span>
+                        <div>{text}</div>
+                        <div className="text-xs mt-1 opacity-75">
+                          {timestamp ? new Date(timestamp).toLocaleString() : 'Now'}
                         </div>
-                      ) : (
-                        <div>
-                          <div className="text-xs mb-1 opacity-75">{msg.senderName}</div>
-                          <div>{msg.text}</div>
-                          <div className="text-xs mt-1 opacity-75">
-                            {new Date(msg.timestamp).toLocaleString()}
-                          </div>
-                        </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8" style={{ color: '#6B7C93' }}>
@@ -302,7 +376,6 @@ const StudentChat = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
           <div
             className="rounded-b-xl p-4"
             style={{
@@ -311,27 +384,7 @@ const StudentChat = () => {
               borderTop: 'none',
             }}
           >
-            {attachedFile && (
-              <div className="mb-2 flex items-center gap-2 text-sm" style={{ color: '#6B7C93' }}>
-                <FileText size={16} />
-                <span>{attachedFile.name}</span>
-                <button
-                  onClick={() => setAttachedFile(null)}
-                  className="ml-2 text-red-500"
-                >
-                  ×
-                </button>
-              </div>
-            )}
             <div className="flex gap-2">
-              <label className="p-2 rounded-lg cursor-pointer" style={{ background: '#F5F7FB' }}>
-                <Paperclip size={20} style={{ color: '#6B7C93' }} />
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
-              </label>
               <input
                 type="text"
                 value={message}
@@ -352,7 +405,7 @@ const StudentChat = () => {
               />
               <ActionButton
                 onClick={handleSendMessage}
-                disabled={sending || (!message.trim() && !attachedFile)}
+                disabled={sending || !message.trim()}
                 className="px-4"
               >
                 <Send size={18} />
@@ -366,4 +419,3 @@ const StudentChat = () => {
 };
 
 export default StudentChat;
-

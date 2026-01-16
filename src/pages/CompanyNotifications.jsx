@@ -2,53 +2,40 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/authStore';
 import { notificationService } from '../services/notificationService';
-import { chatService } from '../services/chatService';
-import { Bell, CheckCircle } from 'lucide-react';
+import { Bell, CheckCircle, UserPlus, MessageSquare, ArrowLeft, Eye } from 'lucide-react';
 import ActionButton from '../components/ActionButton';
 
-const StudentNotifications = () => {
+const CompanyNotifications = () => {
   const navigate = useNavigate();
-  const { email } = useAuth();
+  const { email: companyEmail } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState('');
 
   const loadNotifications = useCallback(async () => {
-    if (!email) return;
+    if (!companyEmail) return;
     setLoading(true);
     try {
-      const data = await notificationService.getNotifications('student', email);
-      const list = Array.isArray(data) ? data : [];
-
-      const filtered = await Promise.all(
-        list.map(async (notification) => {
-          if (notification.type !== 'message') return notification;
-          if (!notification.threadId) return null;
-          const ok = await chatService.isParticipantEnabledThread(notification.threadId, email);
-          return ok ? notification : null;
-        })
-      );
-
-      setNotifications(filtered.filter(Boolean));
+      const data = await notificationService.getNotifications('company', companyEmail);
+      setNotifications(data || []);
     } catch (error) {
       console.error('Failed to load notifications:', error);
     } finally {
       setLoading(false);
     }
-  }, [email]);
+  }, [companyEmail]);
 
   useEffect(() => {
     loadNotifications();
 
     const handleStorage = (event) => {
-      const key = notificationService.notifKey('student', email);
+      const key = notificationService.notifKey('company', companyEmail);
       if (event.key === key) {
         loadNotifications();
       }
     };
 
     const handleCustom = (event) => {
-      if (event.detail?.role === 'student' && event.detail?.email === email) {
+      if (event.detail?.role === 'company' && event.detail?.email === companyEmail) {
         loadNotifications();
       }
     };
@@ -59,62 +46,43 @@ const StudentNotifications = () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('notifications:changed', handleCustom);
     };
-  }, [email, loadNotifications]);
+  }, [companyEmail, loadNotifications]);
 
-  const markNotificationRead = async (id) => {
-    if (!email) return;
-    try {
-      await notificationService.markRead('student', email, id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, readAt: Date.now() } : n))
-      );
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+  const handleNotificationClick = async (notification) => {
+    if (!companyEmail) return;
+    // Mark as read
+    await notificationService.markRead('company', companyEmail, notification.id);
+    // Update local state
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notification.id ? { ...n, readAt: Date.now() } : n))
+    );
+    if (notification.actionUrl) {
+      navigate(notification.actionUrl);
     }
   };
 
-  const markAllNotificationsRead = async () => {
-    if (!email) return;
+  const handleViewCandidate = async (e, notification) => {
+    e.stopPropagation();
+    if (!companyEmail || !notification.internshipId || !notification.studentEmail) return;
+    
+    // Mark as read
+    await notificationService.markRead('company', companyEmail, notification.id);
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notification.id ? { ...n, readAt: Date.now() } : n))
+    );
+    
+    // Navigate to candidates page with query params
+    navigate(`/company/candidates?internship=${notification.internshipId}&student=${notification.studentEmail}&tab=applicants`);
+  };
+
+  const handleMarkAllRead = async () => {
+    if (!companyEmail) return;
     try {
-      await notificationService.markAllRead('student', email);
+      await notificationService.markAllRead('company', companyEmail);
       setNotifications((prev) => prev.map((n) => ({ ...n, readAt: Date.now() })));
     } catch (error) {
       console.error('Failed to mark all as read:', error);
     }
-  };
-
-  const handleNotificationClick = async (notification) => {
-    setNotice('');
-    await markNotificationRead(notification.id);
-    if (notification.type === 'message') {
-      if (!notification.threadId) {
-        setNotice('Chat available after match');
-        return;
-      }
-      const ok = await chatService.isParticipantEnabledThread(notification.threadId, email);
-      if (!ok) {
-        setNotice('Chat available after match');
-        return;
-      }
-    }
-
-    if (notification.actionUrl) {
-      navigate(notification.actionUrl);
-      return;
-    }
-    if (notification.internshipId) {
-      if (notification.type === 'match' || notification.type === 'apply') {
-        navigate(`/student/internships/${notification.internshipId}`);
-      } else if (notification.type === 'message') {
-        navigate('/student/chat');
-      }
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    if (!email) return;
-    await notificationService.markAllRead('student', email);
-    markAllNotificationsRead();
   };
 
   const formatTime = (timestamp) => {
@@ -126,60 +94,45 @@ const StudentNotifications = () => {
     const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
     return date.toLocaleDateString();
   };
 
   const getNotificationIcon = (type) => {
     switch (type) {
-      case 'match':
-        return <CheckCircle size={20} style={{ color: '#10B981' }} />;
+      case 'apply':
+        return <UserPlus size={24} style={{ color: '#3F6FA6' }} />;
       case 'message':
-        return <Bell size={20} style={{ color: '#3F6FA6' }} />;
+        return <MessageSquare size={24} style={{ color: '#3F6FA6' }} />;
       default:
-        return <Bell size={20} style={{ color: '#6B7C93' }} />;
+        return <Bell size={24} style={{ color: '#3F6FA6' }} />;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div style={{ color: '#6B7C93' }}>Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-6">
+      <button
+        onClick={() => navigate('/company/dashboard')}
+        className="flex items-center gap-2 mb-6 text-sm"
+        style={{ color: '#3F6FA6' }}
+      >
+        <ArrowLeft size={16} />
+        Back to Dashboard
+      </button>
+      
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold" style={{ color: '#2C3E5B' }}>
           Notifications
         </h2>
         {notifications.length > 0 && (
-          <ActionButton
-            onClick={handleMarkAllRead}
-            className="text-sm"
-            style={{ background: '#6B7C93' }}
-          >
-            Mark all as read
+          <ActionButton onClick={handleMarkAllRead} className="text-sm">
+            <CheckCircle size={16} className="mr-2" />
+            Mark All Read
           </ActionButton>
         )}
       </div>
-
-      {notice && (
-        <div
-          className="rounded-xl p-4 mb-4 text-sm"
-          style={{
-            background: '#FEF3C7',
-            color: '#92400E',
-            border: '1px solid #FCD34D',
-          }}
-        >
-          {notice}
-        </div>
-      )}
 
       {notifications.length === 0 ? (
         <div
@@ -237,6 +190,28 @@ const StudentNotifications = () => {
                   <div className="text-xs" style={{ color: '#CBD5E1' }}>
                     {formatTime(notification.createdAt)}
                   </div>
+                  {notification.studentEmail && (
+                    <div className="text-xs mt-1 font-medium" style={{ color: '#3F6FA6' }}>
+                      Student: {notification.studentEmail}
+                    </div>
+                  )}
+                  {notification.internshipId && (
+                    <div className="text-xs mt-1" style={{ color: '#6B7C93' }}>
+                      Internship ID: {notification.internshipId}
+                    </div>
+                  )}
+                  {notification.type === 'apply' && notification.internshipId && notification.studentEmail && (
+                    <div className="mt-3">
+                      <ActionButton
+                        onClick={(e) => handleViewCandidate(e, notification)}
+                        className="text-sm"
+                        style={{ padding: '8px 16px' }}
+                      >
+                        <Eye size={14} className="mr-2" />
+                        View Candidate
+                      </ActionButton>
+                    </div>
+                  )}
                 </div>
               </div>
             </button>
@@ -248,5 +223,4 @@ const StudentNotifications = () => {
   );
 };
 
-export default StudentNotifications;
-
+export default CompanyNotifications;

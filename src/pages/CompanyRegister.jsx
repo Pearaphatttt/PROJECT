@@ -11,7 +11,7 @@ import { useAuth } from '../state/authStore';
 
 const CompanyRegister = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, login } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('paste'); // 'paste' or 'upload'
@@ -114,6 +114,13 @@ const CompanyRegister = () => {
     // Simulate analysis
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
+    const loginResult = login(email, password);
+    if (!loginResult.success) {
+      setPasswordError(loginResult.error || 'Login failed');
+      setLoading(false);
+      return;
+    }
+
     const extracted = {
       jobTitle: 'Software Developer Intern',
       mustSkills: ['JavaScript', 'React', 'Git'],
@@ -123,6 +130,7 @@ const CompanyRegister = () => {
       jdText: activeTab === 'paste' ? jdText : '...',
     };
 
+    setLoading(false);
     navigate('/company/internship/edit', { state: { extracted } });
   };
 

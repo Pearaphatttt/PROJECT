@@ -7,10 +7,11 @@ import PasswordInput from '../components/PasswordInput';
 import Dropzone from '../components/Dropzone';
 import ActionButton from '../components/ActionButton';
 import { useAuth } from '../state/authStore';
+import { studentService } from '../services/studentService';
 
 const StudentRegister = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, login } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -97,7 +98,7 @@ const StudentRegister = () => {
       return;
     }
 
-    // Save profile data - store per email to avoid conflicts
+    // Save profile data via service
     const profileData = {
       fullName,
       email,
@@ -108,10 +109,7 @@ const StudentRegister = () => {
       institution,
       province,
     };
-    const profileKey = `studentProfile_${email}`;
-    localStorage.setItem(profileKey, JSON.stringify(profileData));
-    // Also save to old format for backward compatibility
-    localStorage.setItem('studentProfile', JSON.stringify(profileData));
+    await studentService.saveProfile(email, profileData);
 
     // Save resume
     if (resumeFile) {
@@ -121,14 +119,20 @@ const StudentRegister = () => {
         uploadedAt: new Date().toISOString(),
         size: resumeFile.size,
       };
-      localStorage.setItem('studentResume', JSON.stringify(resumeData));
-      // Mark that resume is uploaded
-      localStorage.setItem('hasResume', 'true');
+      await studentService.saveResume(resumeData, email);
     }
 
     // Simulate analysis
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
+    const loginResult = login(email, password);
+    if (!loginResult.success) {
+      setPasswordError(loginResult.error || 'Login failed');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(false);
     navigate('/student/dashboard');
   };
 
@@ -144,7 +148,7 @@ const StudentRegister = () => {
       return;
     }
 
-    // Save profile data - store per email to avoid conflicts
+    // Save profile data via service
     const profileData = {
       fullName,
       email,
@@ -155,16 +159,21 @@ const StudentRegister = () => {
       institution,
       province,
     };
-    const profileKey = `studentProfile_${email}`;
-    localStorage.setItem(profileKey, JSON.stringify(profileData));
-    // Also save to old format for backward compatibility
-    localStorage.setItem('studentProfile', JSON.stringify(profileData));
+    await studentService.saveProfile(email, profileData);
     
-    // Mark that resume is NOT uploaded
-    localStorage.setItem('hasResume', 'false');
+    // Mark that resume is NOT uploaded (via service)
+    await studentService.saveResume(null, email);
 
     await new Promise((resolve) => setTimeout(resolve, 500));
 
+    const loginResult = login(email, password);
+    if (!loginResult.success) {
+      setPasswordError(loginResult.error || 'Login failed');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(false);
     navigate('/student/dashboard');
   };
 

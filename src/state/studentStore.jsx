@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './authStore';
+import { readJSON, writeJSON } from '../utils/storage';
+import { studentAppStateKey } from '../utils/storageKeys';
 
 const StudentContext = createContext(null);
 
@@ -11,6 +14,7 @@ export const useStudentStore = () => {
 };
 
 export const StudentProvider = ({ children }) => {
+  const { email } = useAuth();
   const [appliedInternshipIds, setAppliedInternshipIds] = useState(new Set());
   const [savedInternshipIds, setSavedInternshipIds] = useState(new Set());
   const [matchedInternshipIds, setMatchedInternshipIds] = useState(new Set());
@@ -19,27 +23,51 @@ export const StudentProvider = ({ children }) => {
   const [currentChat, setCurrentChat] = useState(null);
   const [currentChatInternshipId, setCurrentChatInternshipId] = useState(null);
 
-  // Load from localStorage on mount
+  const resetState = () => {
+    setAppliedInternshipIds(new Set());
+    setSavedInternshipIds(new Set());
+    setMatchedInternshipIds(new Set());
+    setSkippedInternshipIds(new Set());
+    setNotifications([]);
+    setCurrentChat(null);
+    setCurrentChatInternshipId(null);
+  };
+
+  // Load from localStorage when email changes
   useEffect(() => {
-    const stored = localStorage.getItem('studentAppState');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setAppliedInternshipIds(new Set(parsed.appliedInternshipIds || []));
-        setSavedInternshipIds(new Set(parsed.savedInternshipIds || []));
-        setMatchedInternshipIds(new Set(parsed.matchedInternshipIds || []));
-        setSkippedInternshipIds(new Set(parsed.skippedInternshipIds || []));
-        setNotifications(parsed.notifications || []);
-        setCurrentChat(parsed.currentChat || null);
-        setCurrentChatInternshipId(parsed.currentChatInternshipId || null);
-      } catch (e) {
-        console.error('Failed to load student state:', e);
+    if (!email) {
+      resetState();
+      return;
+    }
+
+    const perEmailKey = studentAppStateKey(email);
+    let parsed = readJSON(perEmailKey, null);
+
+    // One-time migration from global key
+    if (!parsed) {
+      const legacy = readJSON('studentAppState', null);
+      if (legacy) {
+        writeJSON(perEmailKey, legacy);
+        parsed = legacy;
       }
     }
-  }, []);
+
+    if (parsed) {
+      setAppliedInternshipIds(new Set(parsed.appliedInternshipIds || []));
+      setSavedInternshipIds(new Set(parsed.savedInternshipIds || []));
+      setMatchedInternshipIds(new Set(parsed.matchedInternshipIds || []));
+      setSkippedInternshipIds(new Set(parsed.skippedInternshipIds || []));
+      setNotifications(parsed.notifications || []);
+      setCurrentChat(parsed.currentChat || null);
+      setCurrentChatInternshipId(parsed.currentChatInternshipId || null);
+    } else {
+      resetState();
+    }
+  }, [email]);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
+    if (!email) return;
     const state = {
       appliedInternshipIds: Array.from(appliedInternshipIds),
       savedInternshipIds: Array.from(savedInternshipIds),
@@ -49,8 +77,17 @@ export const StudentProvider = ({ children }) => {
       currentChat,
       currentChatInternshipId,
     };
-    localStorage.setItem('studentAppState', JSON.stringify(state));
-  }, [appliedInternshipIds, savedInternshipIds, matchedInternshipIds, skippedInternshipIds, notifications, currentChat, currentChatInternshipId]);
+    writeJSON(studentAppStateKey(email), state);
+  }, [
+    email,
+    appliedInternshipIds,
+    savedInternshipIds,
+    matchedInternshipIds,
+    skippedInternshipIds,
+    notifications,
+    currentChat,
+    currentChatInternshipId,
+  ]);
 
   const applyToInternship = (id) => {
     setAppliedInternshipIds((prev) => new Set([...prev, id]));
@@ -107,7 +144,7 @@ export const StudentProvider = ({ children }) => {
     setCurrentChat((prev) => [...(prev || []), message]);
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   return (
     <StudentContext.Provider
